@@ -8,7 +8,7 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {BlackList} from "./BlackList.sol";
-
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract bbRUB is
     IERC20,
     IERC20Metadata,
@@ -18,6 +18,7 @@ contract bbRUB is
     Pausable,
     BlackList
 {
+    using Math for uint256;
     string private _name;
     string private _symbol;
 
@@ -114,11 +115,11 @@ contract bbRUB is
     }
 
     function getScaledAmount(uint256 _amount) public view returns (uint256) {
-        return _totalLiquidity == 0 ? _amount : (_amount * _totalSupply) / _totalLiquidity;
+        return _totalLiquidity == 0 ? _amount : Math.mulDiv(_amount,_totalSupply,_totalLiquidity, Math.Rounding.Floor);
     }
 
     function getLiquidityAmount(uint256 _value) public view returns (uint256) {
-        return _totalSupply == 0 ?  0 : (_value * _totalLiquidity) / _totalSupply;
+        return _totalSupply == 0 ?  0 : Math.mulDiv(_value,_totalLiquidity, _totalSupply,Math.Rounding.Ceil);
     }
 
     ////////////////////////

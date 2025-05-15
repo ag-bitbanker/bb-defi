@@ -4,7 +4,7 @@ const { ethers } = require("hardhat");
 
 describe("bbRUB", function () {
     async function setup() {
-        const [owner, compliance, accountant, user] = await ethers.getSigners();
+        const [owner, compliance, accountant, user, user2] = await ethers.getSigners();
         const Factory = await ethers.getContractFactory("bbRUB");
         const bbRUB = await Factory.connect(owner).deploy("BitBanker Ruble","bbRUB",owner, compliance, accountant);
         return {
@@ -12,6 +12,7 @@ describe("bbRUB", function () {
             compliance,
             accountant,
             user,
+            user2,
             bbRUB
         }
     }
@@ -149,6 +150,56 @@ describe("bbRUB", function () {
             await expect(bbRUB.connect(accountant).addLiquidity(1000000)).to.not.be.reverted 
             await expect(bbRUB.connect(accountant).removeLiquidity(1000000)).to.not.be.reverted
              
+        })
+
+        specify("Bisness logics", async function() {
+            const { owner, compliance, accountant, user, user2, bbRUB } = await setup()
+            const accountant_addr = await accountant.getAddress();
+            const user_addr = await user.getAddress();
+            const user2_addr = await user2.getAddress();
+            const BASE = 10**8
+
+            // accountant deposit 1m rub on behalf of user 
+            await bbRUB.connect(owner).mint(accountant_addr, 1_000_000*BASE)
+            expect( await bbRUB.balanceOf(accountant_addr)).to.eq(1_000_000*BASE)
+            expect( await bbRUB.totalLiquidity()).to.eq(1_000_000*BASE)
+            expect( await bbRUB.totalSupply()).to.eq(1_000_000*BASE)
+
+            // accountant transfer tokens to user
+            await expect(bbRUB.connect(accountant).transfer(user_addr,1_000_000*BASE)).to.not.be.reverted 
+            expect( await bbRUB.balanceOf(accountant_addr)).to.eq(0)
+            expect( await bbRUB.balanceOf(user_addr)).to.eq(1_000_000*BASE)
+            expect( await bbRUB.totalLiquidity()).to.eq(1_000_000*BASE)
+            expect( await bbRUB.totalSupply()).to.eq(1_000_000*BASE)
+
+             // accountant distribute overnight yield
+            await expect(bbRUB.connect(accountant).addLiquidity(1_000*BASE)).to.not.be.reverted 
+            expect( await bbRUB.balanceOf(user_addr)).to.eq(1_001_000*BASE)
+
+            // accountant deposit 500k rub on behalf of user 
+            await bbRUB.connect(owner).mint(await accountant.getAddress(), 500_000*BASE)
+            expect( await bbRUB.totalLiquidity()).to.eq(1_501_000*BASE)
+            expect( await bbRUB.totalSupply()).to.eq(1_501_000*BASE)
+            expect( await bbRUB.balanceOf(accountant_addr)).to.eq(500_000*BASE)
+            // rounding
+            expect( await bbRUB.balanceOf(user_addr)).to.gte(1_001_000*BASE)
+            expect( await bbRUB.balanceOf(user_addr)).to.lte(1_001_000*BASE+1)
+            // accountant transfer tokens to user1 
+            await expect(bbRUB.connect(accountant).transfer(user2_addr, 500_000*BASE)).to.not.be.reverted 
+            expect( await bbRUB.balanceOf(user_addr)).to.gte(1_001_000*BASE)
+            expect( await bbRUB.balanceOf(user_addr)).to.lte(1_001_000*BASE+1)
+            expect( await bbRUB.balanceOf(user2_addr)).to.eq(500_000*BASE)
+            // accountant distribute overnight yield
+            await expect(bbRUB.connect(accountant).addLiquidity(2_000*BASE)).to.not.be.reverted 
+            expect( await bbRUB.totalLiquidity()).to.eq(1_503_000*BASE)
+            expect( await bbRUB.totalSupply()).to.eq(1_503_000*BASE)
+            const user_balance = await bbRUB.balanceOf(user_addr)
+            const user2_balance = await bbRUB.balanceOf(user2_addr)
+        
+            expect( Number(user_balance)/BASE).to.gte(1002333.77)
+            expect( Number(user_balance)/BASE).to.lte(1002333.78)
+            expect( Number(user2_balance)/BASE).to.gte(500666.22)
+            expect( Number(user2_balance)/BASE).to.lte(500666.23)
         })
 
         specify("SafeERC20 Integration Test", async function() {
