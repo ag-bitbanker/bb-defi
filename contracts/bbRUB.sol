@@ -7,6 +7,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {BlackList} from "./BlackList.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract bbRUB is
@@ -15,6 +16,7 @@ contract bbRUB is
     IERC20Errors,
     AccessControl,
     Ownable,
+    ReentrancyGuard,
     Pausable,
     BlackList
 {
@@ -240,34 +242,39 @@ contract bbRUB is
      * @dev add liquidity (backed funds)
      * @param _liquidity liquidity to add
      */
-    function addLiquidity(uint256 _liquidity) public onlyRole(ACCOUNANT_ROLE) {
-        uint256 oldTotalLiquidity = _totalLiquidity;
-        _totalLiquidity += _liquidity;
-        require(
-            _totalLiquidity >= _totalSupply,
-            "Total liquidity < total supply"
-        );
-        emit LiquidityChanged(oldTotalLiquidity, _totalLiquidity);
+    function addLiquidity(uint256 _liquidity) public onlyRole(ACCOUNANT_ROLE) nonReentrant {
+        _addLiquidity(_liquidity);
     }
 
+    /**
+     * @dev add liquidity (backed funds) and mint tokens in one transaction
+     * @param _to receiver address
+     * @param _liquidity liquidity to add
+     */
+    function addLiquidityAndMint(address _to, uint256 _liquidity) public onlyOwner nonReentrant {
+        _addLiquidity( _liquidity);
+        _mint(_to, _liquidity);
+    }
     /**
      * @dev remove liquidity (backed funds)
      * @param _liquidity liquidity to remove
      */
     function removeLiquidity(
         uint256 _liquidity
-    ) public onlyRole(ACCOUNANT_ROLE) {
-        require(
-            _liquidity <= _totalLiquidity,
-            "Liquidity to be removed > total liquidity"
-        );
-        uint256 oldTotalLiquidity = _totalLiquidity;
-        _totalLiquidity -= _liquidity;
-        require(
-            _totalLiquidity >= _totalSupply,
-            "Total liquidity < total supply"
-        );
-        emit LiquidityChanged(oldTotalLiquidity, _totalLiquidity);
+    ) public onlyRole(ACCOUNANT_ROLE) nonReentrant {
+        _removeLiquidity(_liquidity);
+    }
+
+    /**
+     * @dev remove liquidity (backed funds) and burn tokens in one transaction
+     * @param _liquidity liquidity to remove
+     */
+    function removeLiquidityAndBurn(
+        address _from,
+        uint256 _liquidity
+    ) public onlyOwner nonReentrant {
+        _burn(_from, _liquidity);
+        _removeLiquidity(_liquidity);
     }
 
     /**
@@ -340,6 +347,39 @@ contract bbRUB is
         emit Burn(_account, _amount);
     }
 
+    /**
+     * @dev add liquidity (backed funds)
+     * @param _liquidity liquidity to add
+     */
+    function _addLiquidity(uint256 _liquidity) internal {
+        uint256 oldTotalLiquidity = _totalLiquidity;
+        _totalLiquidity += _liquidity;
+        require(
+            _totalLiquidity >= _totalSupply,
+            "Total liquidity < total supply"
+        );
+        emit LiquidityChanged(oldTotalLiquidity, _totalLiquidity);
+    }
+
+    /**
+     * @dev remove liquidity (backed funds)
+     * @param _liquidity liquidity to remove
+     */
+    function _removeLiquidity(
+        uint256 _liquidity
+    ) public onlyRole(ACCOUNANT_ROLE) {
+        require(
+            _liquidity <= _totalLiquidity,
+            "Liquidity to be removed > total liquidity"
+        );
+        uint256 oldTotalLiquidity = _totalLiquidity;
+        _totalLiquidity -= _liquidity;
+        require(
+            _totalLiquidity >= _totalSupply,
+            "Total liquidity < total supply"
+        );
+        emit LiquidityChanged(oldTotalLiquidity, _totalLiquidity);
+    }
     /**
      * @dev transfer tokens
      * @param _from sender
